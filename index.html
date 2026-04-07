@@ -770,7 +770,7 @@ input,select{font-family:inherit}
       <input type="text" id="myEntryInput" placeholder="🔍  Find my entry…" oninput="lookupMyEntry(this.value)">
     </div>
     <div class="my-entry-result" id="myEntryResult"></div>
-    <div class="note"><strong>Scoring:</strong> Pick 1 from each of 6 tiers. <strong>Top 4 scores count</strong> per round — 2 worst dropped. Missed cut = <strong>+8</strong> for R3 &amp; R4. Tap any row to see picks.</div>
+    <div class="note" id="lbNote"><strong>Scoring:</strong> Pick 1 from each of 6 tiers. <strong>Top 4 scores count</strong> per round — 2 worst dropped. Missed cut = <strong>+8</strong> for R3 &amp; R4. Tap any row to see picks.</div>
     <!-- Desktop -->
     <div class="lb-table">
       <div class="lb-hdr"><span>Pos</span><span>Entry</span><span>R1</span><span>R2</span><span>R3</span><span>R4</span><span>Total</span></div>
@@ -1006,6 +1006,10 @@ input,select{font-family:inherit}
             <label class="toggle-switch"><input type="checkbox" id="lockToggle" onchange="saveLock()"><span class="toggle-slider"></span></label>
           </div>
           <div class="lock-toggle-row">
+            <div><div class="lock-toggle-label">Reveal Teams</div><div class="lock-toggle-sub">Show picks on leaderboard (turn on when tournament starts)</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="revealToggle" onchange="saveReveal()"><span class="toggle-slider"></span></label>
+          </div>
+          <div class="lock-toggle-row">
             <div><div class="lock-toggle-label">Tiebreaker</div><div class="lock-toggle-sub">How ties on the leaderboard are broken</div></div>
             <select id="tbMode" onchange="saveTbMode()" style="font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:1px;padding:6px 10px;border:1px solid var(--gray-l);border-radius:6px;background:var(--cream);color:var(--gd)">
               <option value="guess">Score guess</option>
@@ -1088,7 +1092,8 @@ let S = {
     password:'masters2026', activeRound:1,
     tbMode:'guess', tbAnswer:null,
     entryFee:20, splits:{s1:60,s2:25,s3:15},
-    locked:false
+    locked:false,
+    teamsRevealed:false
   }
 };
 let lbR=0, ePicks=[null,null,null,null,null,null];
@@ -1105,6 +1110,7 @@ async function loadFromSupabase(){
     const {data:settings, error:settingsErr} = await sb.from('settings').select('*').eq('id',1).single();
     if(!settingsErr && settings){
       S.settings.locked = settings.locked || false;
+      S.settings.teamsRevealed = settings.teams_revealed || false;
       S.settings.tbAnswer = settings.tb_answer;
       S.settings.entryFee = settings.entry_fee || 20;
     }
@@ -1157,6 +1163,7 @@ async function saveSettings(){
   try{
     await sb.from('settings').update({
       locked: S.settings.locked,
+      teams_revealed: S.settings.teamsRevealed,
       tb_answer: S.settings.tbAnswer,
       entry_fee: S.settings.entryFee,
       updated_at: new Date().toISOString()
@@ -1297,6 +1304,32 @@ function renderLB(){
   }).sort(tiebreakSort);
   updateMovement(ranked);
 
+  const revealed=S.settings.teamsRevealed;
+
+  // Pre-tournament: show entry list only (no scores, no picks)
+  if(!revealed){
+    const sorted=[...S.entries].sort((a,b)=>a.name.localeCompare(b.name));
+    if(body)body.innerHTML=sorted.map(e=>`<div class="lb-row" style="cursor:default;grid-template-columns:1fr">
+      <div class="lb-name" style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--gl);font-size:14px">✓</span>${e.name}
+        <span style="font-family:'Oswald',sans-serif;font-size:9px;letter-spacing:1px;color:var(--gray);margin-left:auto">ENTERED</span>
+      </div>
+    </div>`).join('');
+    if(mob)mob.innerHTML=sorted.map(e=>`<div class="lb-m-card" style="cursor:default">
+      <div class="lb-m-top">
+        <div style="color:var(--gl);font-size:18px;width:32px;text-align:center">✓</div>
+        <div class="lb-m-info">
+          <div class="lb-m-name">${e.name}</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:9px;letter-spacing:1px;color:var(--gray);margin-top:2px">TEAM HIDDEN UNTIL TOURNAMENT</div>
+        </div>
+      </div>
+    </div>`).join('');
+    updateHeroHidden();
+    const myInput=document.getElementById('myEntryInput');
+    if(myInput&&myInput.value.trim())lookupMyEntry(myInput.value);
+    return;
+  }
+
   // Desktop
   if(body)body.innerHTML=ranked.map((item,i)=>{
     const{e,rs,tot}=item;
@@ -1377,7 +1410,7 @@ function toggleMobExp(card,idx){
   if(!was){exp.classList.add('open');card.classList.add('expanded');}
 }
 function updateHero(ranked){
-  document.getElementById('hEntries').textContent=S.entries.length;
+  resetHeroLabels();
   document.getElementById('hRound').textContent='R'+S.settings.activeRound;
   if(ranked&&ranked.length){
     document.getElementById('hLeader').textContent=ranked[0].e.name.split(' ')[0];
@@ -1386,6 +1419,23 @@ function updateHero(ranked){
     document.getElementById('hLeader').textContent='—';
     document.getElementById('hScore').textContent='—';
   }
+}
+function updateHeroHidden(){
+  document.getElementById('hLeader').textContent=S.entries.length;
+  document.getElementById('hLeader').nextElementSibling.textContent='Entries';
+  document.getElementById('hScore').textContent='🔒';
+  document.getElementById('hScore').nextElementSibling.textContent='Hidden';
+  document.getElementById('hRound').textContent='THU';
+  document.getElementById('hRound').nextElementSibling.textContent='Reveals';
+  const note=document.getElementById('lbNote');
+  if(note)note.innerHTML='<strong>🔒 Teams Hidden:</strong> All picks will be revealed when the tournament starts Thursday. Use "Find my entry" below to view your own team.';
+}
+function resetHeroLabels(){
+  document.getElementById('hLeader').nextElementSibling.textContent='Leader';
+  document.getElementById('hScore').nextElementSibling.textContent='Score';
+  document.getElementById('hRound').nextElementSibling.textContent='Round';
+  const note=document.getElementById('lbNote');
+  if(note)note.innerHTML='<strong>Scoring:</strong> Pick 1 from each of 6 tiers. <strong>Top 4 scores count</strong> per round — 2 worst dropped. Missed cut = <strong>+8</strong> for R3 &amp; R4. Tap any row to see picks.';
 }
 
 // ── MY ENTRY LOOKUP ──
@@ -1799,6 +1849,13 @@ async function saveLock(){
   updateLockBanner();updateLockNavIndicator();
   showAlert('scoreAlert',S.settings.locked?'🔒 Entries are now locked':'🔓 Entries are now open','ok');
 }
+async function saveReveal(){
+  S.settings.teamsRevealed=document.getElementById('revealToggle').checked;
+  save();
+  await saveSettings();
+  renderLB();
+  showAlert('scoreAlert',S.settings.teamsRevealed?'👀 Teams are now visible on leaderboard':'🙈 Teams are now hidden on leaderboard','ok');
+}
 function updateLockBanner(){
   const btn=document.getElementById('submitBtn');if(btn)btn.disabled=!!S.settings.locked;
   let banner=document.getElementById('lockBanner');
@@ -1864,6 +1921,7 @@ function checkAdmin(){
 function renderAdmin(){
   renderEntryList();renderFieldList();renderSE();populateSels();
   const lt=document.getElementById('lockToggle');if(lt)lt.checked=!!S.settings.locked;
+  const rt=document.getElementById('revealToggle');if(rt)rt.checked=!!S.settings.teamsRevealed;
   const ef=document.getElementById('entryFee');if(ef&&S.settings.entryFee)ef.value=S.settings.entryFee;
   if(S.settings.splits){
     const s=S.settings.splits;
