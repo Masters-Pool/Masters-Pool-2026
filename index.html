@@ -595,8 +595,13 @@ input,select{font-family:inherit}
 .submit-btn:active{transform:scale(0.98);background:var(--gm)}
 .submit-btn:disabled{opacity:0.45;cursor:not-allowed;transform:none}
 /* Success screen */
-.success-screen{text-align:center;padding:40px 20px}
-.success-screen .trophy{font-size:72px;margin-bottom:16px;display:block}
+@keyframes successFadeIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes trophyBounce{0%,100%{transform:scale(1)}30%{transform:scale(1.25) rotate(-8deg)}60%{transform:scale(1.1) rotate(5deg)}}
+@keyframes checkPop{0%{transform:scale(0);opacity:0}65%{transform:scale(1.2);opacity:1}100%{transform:scale(1);opacity:1}}
+.success-screen{text-align:center;padding:40px 20px;animation:successFadeIn 0.45s ease both}
+.success-screen .check-circle{width:56px;height:56px;background:#d1fae5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;animation:checkPop 0.5s cubic-bezier(.34,1.56,.64,1) both}
+.success-screen .check-circle svg{width:28px;height:28px;stroke:#065f46;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.success-screen .trophy{font-size:64px;margin-bottom:12px;display:block;animation:trophyBounce 0.7s ease 0.15s both}
 .success-screen h3{font-family:'Playfair Display',serif;font-size:26px;color:var(--gd);margin-bottom:8px}
 .success-screen p{font-family:'EB Garamond',serif;font-size:16px;color:var(--gray);margin-bottom:24px;line-height:1.6}
 /* Confirmation picks grid */
@@ -857,6 +862,7 @@ input,select{font-family:inherit}
         <button class="submit-btn" id="submitBtn" onclick="submitEntry()">🏌️ Submit My Entry</button>
       </div>
       <div id="enterSuccess" class="success-screen" style="display:none">
+        <div class="check-circle"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
         <span class="trophy">🏆</span>
         <h3 id="successName">You're in!</h3>
         <p>Good luck this week. Screenshot your picks, then follow the leaderboard.</p>
@@ -1498,6 +1504,7 @@ function setBoardRound(r,btn){boardRound=r;document.querySelectorAll('.sb-pill')
 function allPlayers(){return[...S.players.favorites.map(n=>({name:n,ti:0})),...S.players.contenders.map(n=>({name:n,ti:1})),...S.players.sleepers.map(n=>({name:n,ti:2})),...S.players.longshots.map(n=>({name:n,ti:3}))];}
 function renderScores(){
   const grid=document.getElementById('scoresGrid');
+  if(!grid)return;
   const poolNames=new Set(allPlayers().map(p=>p.name));
   if(!tourneyField.length){grid.innerHTML='<div class="sb-loading"><div class="sb-spin"></div><p>Fetching leaderboard...</p></div>';return;}
   const active=tourneyField.filter(p=>!p.cut);
@@ -2095,7 +2102,9 @@ async function submitEntry(){
     showConfirmationPicks([...ePicks]);
     updateShareUrls();updatePrizePool();
     document.getElementById('enterForm').style.display='none';
-    document.getElementById('enterSuccess').style.display='block';
+    const suc=document.getElementById('enterSuccess');
+    suc.style.animation='none';suc.offsetHeight;suc.style.animation='';
+    suc.style.display='block';
   }catch(e){
     showAlert('enterAlert','Error saving entry. Please try again.','err');
     console.error(e);
