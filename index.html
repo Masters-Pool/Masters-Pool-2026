@@ -2108,7 +2108,8 @@ async function submitEntry(){
     // Update rest of UI — errors here must not hide the confirmation
     try{renderAll();}catch(re){console.error('renderAll error:',re);}
   }catch(e){
-    showAlert('enterAlert','Error saving entry. Please try again.','err');
+    const msg=e?.message||e?.details||e?.hint||JSON.stringify(e)||'Unknown error';
+    showAlert('enterAlert','Error saving entry: '+msg,'err');
     console.error(e);
   }finally{
     document.getElementById('submitBtn').disabled=false;
