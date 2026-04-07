@@ -1208,10 +1208,11 @@ async function pollEntries(){
     const fresh=data.map(e=>({id:e.id,name:e.name,picks:e.picks||[],tbGuess:e.tb_guess}));
     const oldIds=new Set(S.entries.map(e=>e.id));
     const newOnes=fresh.filter(e=>!oldIds.has(e.id));
-    if(newOnes.length){
+    const changed=fresh.length!==S.entries.length||newOnes.length>0;
+    if(changed){
       S.entries=fresh;
       renderAll();
-      showToast('📡 '+newOnes.map(e=>e.name).join(', ')+' joined the pool!');
+      if(newOnes.length)showToast('📡 '+newOnes.map(e=>e.name).join(', ')+' joined the pool!');
     }
   }catch(e){console.error('pollEntries:',e);}
 }
