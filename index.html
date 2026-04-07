@@ -1200,6 +1200,22 @@ function subscribeToChanges(){
     .subscribe();
 }
 
+// ── ENTRY POLLING (fallback for realtime) ──
+async function pollEntries(){
+  try{
+    const {data,error}=await sb.from('entries').select('*').order('created_at',{ascending:true});
+    if(error||!data)return;
+    const fresh=data.map(e=>({id:e.id,name:e.name,picks:e.picks||[],tbGuess:e.tb_guess}));
+    const oldIds=new Set(S.entries.map(e=>e.id));
+    const newOnes=fresh.filter(e=>!oldIds.has(e.id));
+    if(newOnes.length){
+      S.entries=fresh;
+      renderAll();
+      showToast('📡 '+newOnes.map(e=>e.name).join(', ')+' joined the pool!');
+    }
+  }catch(e){console.error('pollEntries:',e);}
+}
+
 // ── SEED DATA (2026 Masters tiers — FanDuel odds via CBS Sports/Golf Channel) ──
 function seed(){
   S.players={
@@ -1816,7 +1832,10 @@ function startAutoRefresh(){
       const ranked=S.entries.map(e=>({e,tot:entTot(e),ds:entTot(e)})).sort(tiebreakSort);
       commitRanks(ranked);showToast('↻ Scores updated!');
     }
+    await pollEntries();
   },REFRESH_INTERVAL*1000);
+  // Also poll entries every 15 seconds so new signups appear quickly on all browsers
+  setInterval(()=>{if(!document.hidden)pollEntries();},15000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&secondsUntilRefresh<=0){secondsUntilRefresh=REFRESH_INTERVAL;fetchScores().then(()=>showToast('↻ Scores updated!'));}});
 }
 function updateCountdown(){
