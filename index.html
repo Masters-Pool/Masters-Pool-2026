@@ -1159,10 +1159,9 @@ async function updateEntry(entry){
 }
 
 async function deleteEntry(id){
-  try{
-    const {error} = await sb.from('entries').delete().eq('id', id);
-    if(error) throw error;
-  }catch(e){console.error('Delete entry error:',e);}
+  const {error,count} = await sb.from('entries').delete({count:'exact'}).eq('id', id);
+  if(error) throw error;
+  if(count===0) throw new Error('Delete was blocked by database permissions. Ask your Supabase admin to add a DELETE policy for the anon role on the entries table.');
 }
 
 async function saveSettings(){
