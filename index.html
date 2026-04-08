@@ -2120,19 +2120,18 @@ function gotoLeaderboard(){
 
 // ── WILD CARD AUTOCOMPLETE ──
 // Complete 91-player Masters 2026 field (source: masters.com via NBC Sports)
-// WC candidates are filtered to exclude Tier 1-4 players at runtime
 const MASTERS_FIELD=['Aaron Rai','Adam Scott','Akshay Bhatia','Aldrich Potgieter','Alex Noren','Andrew Novak','Angel Cabrera','Ben Griffin','Brandon Holtz','Brian Campbell','Brian Harman','Brooks Koepka','Bryson DeChambeau','Bubba Watson','Cameron Smith','Cameron Young','Carlos Ortiz','Casey Jarvis','Charl Schwartzel','Chris Gotterup','Collin Morikawa','Corey Conners','Daniel Berger','Danny Willett','Davis Riley','Dustin Johnson','Ethan Fang','Fifa Laopakdee','Fred Couples','Gary Woodland','Harris English','Harry Hall','Haotong Li','Hideki Matsuyama','J.J. Spaun','Jackson Herrington','Jacob Bridgeman','Jake Knapp','Jason Day','John Keefer','Jon Rahm','Jordan Spieth','Jose Maria Olazabal','Justin Rose','Justin Thomas','Keegan Bradley','Kristoffer Reitan','Kurt Kitayama','Ludvig Aberg','Marco Penge','Mason Howell','Matt Fitzpatrick','Matt McCarty','Mateo Pulcini','Maverick McNealy','Max Greyserman','Max Homa','Michael Brennan','Michael Kim','Mike Weir','Min Woo Lee','Naoyuki Kataoka','Nicolas Echavarria','Nick Taylor','Nicolai Hojgaard','Patrick Cantlay','Patrick Reed','Rasmus Hojgaard','Rasmus Neergaard-Petersen','Robert MacIntyre','Rory McIlroy','Russell Henley','Ryan Fox','Ryan Gerard','Sam Burns','Sami Valimaki','Samuel Stevens','Scottie Scheffler','Sepp Straka','Sergio Garcia','Shane Lowry','Si Woo Kim','Sungjae Im','Tom McKibbin','Tommy Fleetwood','Tyrrell Hatton','Viktor Hovland','Vijay Singh','Wyndham Clark','Xander Schauffele','Zach Johnson'];
-// Keep legacy name for any references
+// Tier 1-4 players explicitly excluded from Wild Card pool
+const TIER_PLAYERS=new Set(['Scottie Scheffler','Jon Rahm','Bryson DeChambeau','Rory McIlroy','Ludvig Aberg','Xander Schauffele','Matt Fitzpatrick','Cameron Young','Tommy Fleetwood','Collin Morikawa','Justin Rose','Robert MacIntyre','Patrick Reed','Hideki Matsuyama','Min Woo Lee','Chris Gotterup','Jordan Spieth','Brooks Koepka','Si Woo Kim','Shane Lowry','Viktor Hovland','Akshay Bhatia','Patrick Cantlay','Nicolai Hojgaard','Jacob Bridgeman','Sepp Straka','Adam Scott','Tyrrell Hatton','J.J. Spaun','Russell Henley','Sungjae Im','Harris English']);
+// WC pool = full field minus all tier players
+const WC_POOL=MASTERS_FIELD.filter(n=>!TIER_PLAYERS.has(n)).sort();
 const TOUR_PROS=MASTERS_FIELD;
 let wcFocusIdx={};
 function getWcCandidates(slot,query){
-  const tierPlayers=new Set(allPlayers().map(p=>p.name)); // all players in Tiers 1-4
   const otherSlot=slot===4?5:4;
-  const taken=new Set([ePicks[0],ePicks[1],ePicks[2],ePicks[3],ePicks[otherSlot]].filter(Boolean));
-  // Only non-tier Masters field players, excluding already-taken picks
-  const pool=MASTERS_FIELD.filter(n=>!tierPlayers.has(n)&&!taken.has(n)).sort();
+  const taken=new Set([ePicks[4===slot?5:4]].filter(Boolean)); // only exclude the other WC pick
   const q=query.trim().toLowerCase();if(!q)return[];
-  return pool.filter(n=>n.toLowerCase().includes(q)).slice(0,9);
+  return WC_POOL.filter(n=>!taken.has(n)&&n.toLowerCase().includes(q)).slice(0,9);
 }
 function getTierLabel(name){const ti=TKEYS.findIndex(k=>S.players[k].includes(name));return ti>=0?EMO[ti]+' '+TIERS[ti]:'✏️ Write-in';}
 function hlMatch(name,q){if(!q)return name;const i=name.toLowerCase().indexOf(q.toLowerCase());if(i<0)return name;return name.slice(0,i)+'<mark>'+name.slice(i,i+q.length)+'</mark>'+name.slice(i+q.length);}
