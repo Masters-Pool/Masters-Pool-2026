@@ -1080,8 +1080,8 @@ const TMETA = [
   {label:'⭐ Tier 2 — Contenders', sub:'Strong players who can win on their best week.',        key:'contenders'},
   {label:'🎯 Tier 3 — Sleepers',   sub:'Mid-tier players primed for a surprise run.',           key:'sleepers'},
   {label:'🎲 Tier 4 — Longshots',  sub:'High-upside picks at longer odds.',                    key:'longshots'},
-  {label:'🃏 Wild Card 1',          sub:'Any golfer in the field — cannot duplicate other picks.',key:'all'},
-  {label:'🃏 Wild Card 2',          sub:'Any golfer in the field — must differ from all picks.', key:'all'},
+  {label:'🃏 Wild Card 1',          sub:'Any Masters field player NOT already in Tiers 1–4.',key:'all'},
+  {label:'🃏 Wild Card 2',          sub:'Any Masters field player NOT already in Tiers 1–4 — must differ from WC1.', key:'all'},
 ];
 
 // ── SUPABASE CONFIG ──
@@ -2119,34 +2119,31 @@ function gotoLeaderboard(){
 }
 
 // ── WILD CARD AUTOCOMPLETE ──
-const TOUR_PROS=['Aaron Rai','Adam Hadwin','Adam Scott','Akshay Bhatia','Alex Noren','Aldrich Potgieter','Andrew Novak','Austin Eckroat','Ben Griffin','Billy Horschel','Brian Harman','Brooks Koepka','Bryson DeChambeau','Bubba Watson','Byeong Hun An','Cameron Davis','Cameron Smith','Cameron Young','Casey Jarvis','Charl Schwartzel','Chris Gotterup','Chris Kirk','Collin Morikawa','Corey Conners','Daniel Berger','Danny Willett','Davis Riley','Davis Thompson','Denny McCarthy','Dustin Johnson','Erik van Rooyen','Harris English','Harry Hall','Hideki Matsuyama','J.J. Spaun','Jacob Bridgeman','Jason Day','Joaquin Niemann','Jon Rahm','Jordan Spieth','Jose Maria Olazabal','JT Poston','Justin Rose','Justin Thomas','Keegan Bradley','Kurt Kitayama','Larry Mize','Ludvig Aberg','Matt Fitzpatrick','Max Greyserman','Max Homa','Maverick McNealy','Min Woo Lee','Neal Shipley','Nick Taylor','Nicolai Hojgaard','Patrick Cantlay','Patrick Reed','Rasmus Hojgaard','Rasmus Neergaard-Petersen','Robert MacIntyre','Rory McIlroy','Russell Henley','Ryan Fox','Sahith Theegala','Scottie Scheffler','Sepp Straka','Sergio Garcia','Shane Lowry','Si Woo Kim','Sungjae Im','Taylor Pendrith','Thomas Detry','Tom Kim','Tom McKibbin','Tommy Fleetwood','Tony Finau','Tyrrell Hatton','Viktor Hovland','Will Zalatoris','Wyndham Clark','Xander Schauffele'];
+// Full Masters 2026 field — WC candidates are filtered to exclude Tier 1-4 players at runtime
+const MASTERS_FIELD=['Aaron Rai','Adam Hadwin','Adam Scott','Akshay Bhatia','Alex Noren','Aldrich Potgieter','Andrew Novak','Austin Eckroat','Ben Griffin','Bernhard Langer','Billy Horschel','Brian Harman','Brooks Koepka','Bryson DeChambeau','Bubba Watson','Byeong Hun An','Cameron Davis','Cameron Smith','Cameron Young','Casey Jarvis','Charl Schwartzel','Chris Gotterup','Chris Kirk','Collin Morikawa','Corey Conners','Daniel Berger','Danny Willett','Davis Riley','Davis Thompson','Denny McCarthy','Dustin Johnson','Erik van Rooyen','Fred Couples','Harris English','Harry Hall','Hideki Matsuyama','J.J. Spaun','Jacob Bridgeman','Jason Day','Joaquin Niemann','Jon Rahm','Jordan Spieth','Jose Maria Olazabal','JT Poston','Justin Rose','Justin Thomas','Keegan Bradley','Kurt Kitayama','Larry Mize','Ludvig Aberg','Matt Fitzpatrick','Max Greyserman','Max Homa','Maverick McNealy','Mike Weir','Min Woo Lee','Neal Shipley','Nick Taylor','Nicolai Hojgaard','Patrick Cantlay','Patrick Reed','Phil Mickelson','Rasmus Hojgaard','Rasmus Neergaard-Petersen','Robert MacIntyre','Rory McIlroy','Russell Henley','Ryan Fox','Sahith Theegala','Scottie Scheffler','Sepp Straka','Sergio Garcia','Shane Lowry','Si Woo Kim','Sungjae Im','Taylor Pendrith','Thomas Detry','Tiger Woods','Tom Kim','Tom McKibbin','Tommy Fleetwood','Tony Finau','Trevor Immelman','Tyrrell Hatton','Viktor Hovland','Will Zalatoris','Wyndham Clark','Xander Schauffele','Zach Johnson'];
+// Keep legacy name for any references
+const TOUR_PROS=MASTERS_FIELD;
 let wcFocusIdx={};
 function getWcCandidates(slot,query){
-  const fieldNames=allPlayers().map(p=>p.name);
-  const masterList=[...new Set([...fieldNames,...TOUR_PROS])].sort();
+  const tierPlayers=new Set(allPlayers().map(p=>p.name)); // all players in Tiers 1-4
   const otherSlot=slot===4?5:4;
   const taken=new Set([ePicks[0],ePicks[1],ePicks[2],ePicks[3],ePicks[otherSlot]].filter(Boolean));
+  // Only non-tier Masters field players, excluding already-taken picks
+  const pool=MASTERS_FIELD.filter(n=>!tierPlayers.has(n)&&!taken.has(n)).sort();
   const q=query.trim().toLowerCase();if(!q)return[];
-  return masterList.filter(n=>!taken.has(n)&&n.toLowerCase().includes(q)).slice(0,9);
+  return pool.filter(n=>n.toLowerCase().includes(q)).slice(0,9);
 }
 function getTierLabel(name){const ti=TKEYS.findIndex(k=>S.players[k].includes(name));return ti>=0?EMO[ti]+' '+TIERS[ti]:'✏️ Write-in';}
 function hlMatch(name,q){if(!q)return name;const i=name.toLowerCase().indexOf(q.toLowerCase());if(i<0)return name;return name.slice(0,i)+'<mark>'+name.slice(i,i+q.length)+'</mark>'+name.slice(i+q.length);}
 function wcInput(slot,val){
   const q=val.trim();const dd=document.getElementById('wcd_'+slot);if(!dd)return;
   wcFocusIdx[slot]=-1;if(!q){dd.innerHTML='';return;}
-  const matches=getWcCandidates(slot,q);const inField=new Set(allPlayers().map(p=>p.name));
-  const exactHit=matches.some(n=>n.toLowerCase()===q.toLowerCase());
-  const otherSlot=slot===4?5:4;
-  const taken=new Set([ePicks[0],ePicks[1],ePicks[2],ePicks[3],ePicks[otherSlot]].filter(Boolean));
-  let html=matches.map((name,i)=>{
-    const lbl=getTierLabel(name);const isField=inField.has(name);
-    return`<div class="wc-opt" data-idx="${i}" data-name="${name.replace(/"/g,'&quot;')}" onmousedown="wcSelect(${slot},this.dataset.name)" onmouseover="wcHover(${slot},${i})">
-      <span class="wc-opt-name">${hlMatch(name,q)}</span>
-      <span class="${isField?'wc-opt-tier':'wc-opt-external'}">${lbl}</span>
-    </div>`;
-  }).join('');
-  if(!exactHit&&q.length>=2&&!taken.has(val.trim())){const safeVal=val.trim().replace(/"/g,'&quot;');html+=`<div class="wc-opt custom" data-idx="${matches.length}" data-name="${safeVal}" onmousedown="wcSelect(${slot},this.dataset.name)" onmouseover="wcHover(${slot},${matches.length})"><span class="wc-opt-name">&#43; Add &ldquo;${val.trim()}&rdquo;</span><span class="wc-opt-external">Custom write-in</span></div>`;}
-  dd.innerHTML=html;
+  const matches=getWcCandidates(slot,q);
+  if(!matches.length){dd.innerHTML=`<div class="wc-opt" style="pointer-events:none;opacity:0.5"><span class="wc-opt-name">No field players match</span></div>`;return;}
+  dd.innerHTML=matches.map((name,i)=>`<div class="wc-opt" data-idx="${i}" data-name="${name.replace(/"/g,'&quot;')}" onmousedown="wcSelect(${slot},this.dataset.name)" onmouseover="wcHover(${slot},${i})">
+    <span class="wc-opt-name">${hlMatch(name,q)}</span>
+    <span class="wc-opt-external">⛳ Masters Field</span>
+  </div>`).join('');
 }
 function wcHover(slot,idx){wcFocusIdx[slot]=idx;document.querySelectorAll(`#wcd_${slot} .wc-opt`).forEach((el,i)=>el.classList.toggle('focused',i===idx));}
 function wcKeydown(e,slot){
