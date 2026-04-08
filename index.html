@@ -2226,24 +2226,40 @@ function showAlert(id,msg,type){const el=document.getElementById(id);if(!el)retu
 
 // ── INIT ──
 async function init(){
-  // Load from Supabase first
-  await loadFromSupabase();
-  if(!S.players.favorites.length)seed();
+  try{
+    // Load from Supabase first
+    await loadFromSupabase();
+    if(!S.players.favorites.length)seed();
 
-  document.getElementById('activeRound').value=S.settings.activeRound;
-  buildTourneyFieldFromPool();
-  renderAll();
-  fetchScores();
-  startAutoRefresh();
-  handleUrlParams();
-  updateShareUrls();
-  if(S.settings.locked)updateLockNavIndicator();
+    document.getElementById('activeRound').value=S.settings.activeRound;
+    buildTourneyFieldFromPool();
+    renderAll();
+    fetchScores();
+    startAutoRefresh();
+    handleUrlParams();
+    updateShareUrls();
+    if(S.settings.locked)updateLockNavIndicator();
 
-  // Subscribe to realtime updates
-  subscribeToChanges();
-  console.log('Masters Pool 2026 loaded with',S.entries.length,'entries');
+    // Subscribe to realtime updates
+    subscribeToChanges();
+    console.log('Masters Pool 2026 loaded with',S.entries.length,'entries');
+  }catch(e){
+    console.error('Init error:',e);
+    var errDiv=document.createElement('div');
+    errDiv.style.cssText='padding:40px;text-align:center;font-family:sans-serif;';
+    errDiv.textContent='Error loading page: '+e.message+'. Please refresh or try a different browser.';
+    document.body.appendChild(errDiv);
+  }
 }
-init();
+// Check if Supabase loaded
+if(typeof window.supabase==='undefined'){
+  var errDiv=document.createElement('div');
+  errDiv.style.cssText='padding:40px;text-align:center;font-family:sans-serif;';
+  errDiv.textContent='Failed to load database connection. Please check your internet and refresh.';
+  document.body.appendChild(errDiv);
+}else{
+  init();
+}
 </script>
 </body>
 </html>
