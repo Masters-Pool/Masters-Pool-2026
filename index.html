@@ -1604,7 +1604,7 @@ async function loadAugustaScoreboard(){
   tbody.innerHTML='<tr><td colspan="21" class="augusta-loading">Loading scoreboard...</td></tr>';
 
   // Fetch main leaderboard first
-  const urls=['https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard?event=401703512','https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'];
+  const urls=['https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941','https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard'];
   let data=null;
   for(const u of urls){try{const r=await fetch(u);if(r.ok){data=await r.json();break;}}catch(e){}}
 
@@ -1627,7 +1627,7 @@ async function loadAugustaScoreboard(){
 
     if(id){
       try{
-        const detailUrl=`https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard/${data.events[0].id}/competitorsummary/${id}`;
+        const detailUrl=`https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard/${data.events[0].id}/competitorsummary/${id}`;
         const dr=await fetch(detailUrl);
         if(dr.ok){
           const dd=await dr.json();
@@ -1754,7 +1754,7 @@ async function fetchScores(){
   document.getElementById('syncTime').textContent='…';
   const grid=document.getElementById('scoresGrid');
   if(grid)grid.innerHTML='<div class="sb-loading"><div class="sb-spin"></div><p>Fetching leaderboard...</p></div>';
-  const urls=['https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard?event=401703512','https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'];
+  const urls=['https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941','https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard'];
   let data=null;
   for(const u of urls){try{const r=await fetch(u);if(r.ok){data=await r.json();break;}}catch(e){}}
   const now=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
