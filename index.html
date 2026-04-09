@@ -1730,13 +1730,14 @@ function renderAugustaBoard(){
 
   tbody.innerHTML=html;
 
-  // Add click handlers for flip animation
-  tbody.querySelectorAll('td').forEach(td=>{
-    td.addEventListener('click',()=>{
+  // Use event delegation for flip animation (more reliable for all rows)
+  tbody.onclick=function(e){
+    const td=e.target.closest('td');
+    if(td){
       td.classList.add('flipping');
       setTimeout(()=>td.classList.remove('flipping'),400);
-    });
-  });
+    }
+  };
 
   // Update projected cut (calculate from data or use default)
   const cutEl=document.getElementById('projectedCut');
