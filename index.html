@@ -1769,29 +1769,58 @@ async function fetchScores(){
   document.getElementById('syncTime').textContent='…';
   const grid=document.getElementById('scoresGrid');
   if(grid)grid.innerHTML='<div class="sb-loading"><div class="sb-spin"></div><p>Fetching leaderboard...</p></div>';
-  const urls=['https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941','https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard'];
-  let data=null;
-  for(const u of urls){try{const r=await fetch(u);if(r.ok){data=await r.json();break;}}catch(e){}}
-  const now=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  if(!data){document.getElementById('syncTime').textContent='Manual';buildTourneyFieldFromPool();renderAll();return;}
+
+  // Use scoreboard header API for live scores
+  let headerData=null;
   try{
-    const comps=data?.events?.[0]?.competitions?.[0]?.competitors||[];
-    const ar=data?.events?.[0]?.status?.period||S.settings.activeRound;
+    const hr=await fetch('https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=golf&league=pga');
+    if(hr.ok)headerData=await hr.json();
+  }catch(e){}
+
+  const now=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  const event=headerData?.sports?.[0]?.leagues?.[0]?.events?.[0];
+  if(!event||!event.competitors){document.getElementById('syncTime').textContent='Manual';buildTourneyFieldFromPool();renderAll();return;}
+
+  try{
+    const comps=event.competitors||[];
+    const ar=event.status?.period||S.settings.activeRound||1;
+    const eventId=event.id||'401811941';
     S.settings.activeRound=ar;
     document.getElementById('activeRound').value=ar;
     tourneyField=[];
-    comps.forEach(c=>{
-      const name=c.athlete?.displayName;if(!name)return;
+
+    // Fetch round scores from core API for each player
+    for(const c of comps){
+      const name=c.displayName;if(!name)continue;
+      const id=c.id;
       const isCut=(c.status?.displayValue||'').toLowerCase().includes('cut')||(c.status?.displayValue||'').toLowerCase().includes('wd');
       const rounds={r1:null,r2:null,r3:null,r4:null};
-      if(c.linescores)c.linescores.forEach((ls,i)=>{const v=ls.value;if(v!==undefined&&v!==null)rounds['r'+(i+1)]=v==='E'?0:Number(v);});
+
+      // Fetch detailed round scores
+      if(id){
+        try{
+          const detailUrl=`https://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/${eventId}/competitions/${eventId}/competitors/${id}/linescores`;
+          const dr=await fetch(detailUrl);
+          if(dr.ok){
+            const dd=await dr.json();
+            (dd.items||[]).forEach((rd,idx)=>{
+              if(rd.displayValue){
+                const val=rd.displayValue==='E'?0:parseInt(rd.displayValue)||null;
+                rounds['r'+(idx+1)]=val;
+              }
+            });
+          }
+        }catch(e){}
+      }
+
       const valid=[rounds.r1,rounds.r2,rounds.r3,rounds.r4].filter(v=>v!==null);
       const total=valid.length?valid.reduce((a,b)=>a+b,0):null;
       tourneyField.push({name,cut:isCut,...rounds,total});
       if(!S.scores[name])S.scores[name]={};
       S.scores[name].cut=isCut;
       Object.assign(S.scores[name],rounds);
-    });
+    }
+
     document.getElementById('syncTime').textContent=now;
     document.getElementById('syncRound').textContent='Round '+ar;
     save();renderAll();
