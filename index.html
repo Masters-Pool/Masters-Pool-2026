@@ -1788,81 +1788,106 @@ async function fetchScores(){
   const grid=document.getElementById('scoresGrid');
   if(grid)grid.innerHTML='<div class="sb-loading"><div class="sb-spin"></div><p>Fetching leaderboard...</p></div>';
 
-  let headerData=null;
+  // Strip diacritics + map special chars (ø→o, æ→ae) so ESPN names match pool names
+  function normName(s){
+    return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[øØ]/g,c=>c==='ø'?'o':'O')
+      .replace(/[æÆ]/g,c=>c==='æ'?'ae':'Ae')
+      .trim();
+  }
+
+  const EVENT='401811941';
+  const CORE='https://sports.core.api.espn.com/v2/sports/golf/leagues/pga';
+  const COMP=`${CORE}/events/${EVENT}/competitions/${EVENT}/competitors`;
+
   try{
-    const hr=await fetch('https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=golf&league=pga');
-    if(hr.ok)headerData=await hr.json();
-  }catch(e){}
+    // Step 1: fetch all 91 competitor IDs
+    const listR=await fetch(`${COMP}?limit=200`);
+    if(!listR.ok)throw new Error('ESPN competitors list failed: '+listR.status);
+    const{items=[]}=await listR.json();
 
-  const now=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  const event=headerData?.sports?.[0]?.leagues?.[0]?.events?.[0];
-  if(!event||!event.competitors){document.getElementById('syncTime').textContent='Manual';buildTourneyFieldFromPool();renderAll();return;}
+    // Step 2: resolve athlete display names — cache in localStorage to avoid re-fetching every call
+    const CACHE_KEY='espn_names_'+EVENT;
+    let nameCache={};
+    try{
+      const raw=JSON.parse(localStorage.getItem(CACHE_KEY)||'{}');
+      // Use cache if it has most players and was refreshed within 12 hours
+      if(Object.keys(raw.names||{}).length>80&&Date.now()-(raw.ts||0)<43200000)nameCache=raw.names;
+    }catch(e){}
 
-  try{
-    const comps=event.competitors||[];
-    const ar=event.status?.period||S.settings.activeRound||1;
-    const eventId=event.id||'401811941';
-    S.settings.activeRound=ar;
-    document.getElementById('activeRound').value=ar;
-
-    // Pool players whose scores actually matter for scoring
-    const poolNames=new Set(allPlayers().map(p=>p.name));
-    // Also include any WC picks from entries
-    S.entries.forEach(e=>(e.picks||[]).forEach(p=>{if(p)poolNames.add(p);}));
-
-    // Fetch linescores in parallel — only for pool players, not all 91
-    async function getLinescores(id){
-      try{
-        const r=await fetch(`https://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/${eventId}/competitions/${eventId}/competitors/${id}/linescores`);
-        if(!r.ok)return{};
-        const d=await r.json();
-        const rounds={};
-        (d.items||[]).forEach((rd,idx)=>{
-          if(rd.displayValue!==undefined){
-            rounds['r'+(idx+1)]=rd.displayValue==='E'?0:parseInt(rd.displayValue)||null;
-          }
-        });
-        return rounds;
-      }catch(e){return{};}
+    const needNames=items.filter(item=>!nameCache[item.id]);
+    if(needNames.length>0){
+      await Promise.all(needNames.map(async({id})=>{
+        try{
+          const r=await fetch(`${CORE}/seasons/2026/athletes/${id}`);
+          if(r.ok){const d=await r.json();nameCache[id]=d.displayName||d.fullName||null;}
+        }catch(e){}
+      }));
+      try{localStorage.setItem(CACHE_KEY,JSON.stringify({names:nameCache,ts:Date.now()}));}catch(e){}
     }
 
-    // Build comp map and fire parallel fetches for pool players only
-    const poolComps=comps.filter(c=>poolNames.has(c.displayName));
-    const otherComps=comps.filter(c=>!poolNames.has(c.displayName));
+    // Step 3: fetch linescores + status for ALL 91 players in parallel
+    const playerData=await Promise.all(items.map(async({id})=>{
+      const espnName=nameCache[id]||null;
+      const poolName=normName(espnName);
+      try{
+        const[lsR,stR]=await Promise.all([
+          fetch(`${COMP}/${id}/linescores`),
+          fetch(`${COMP}/${id}/status`)
+        ]);
+        const ls=lsR.ok?await lsR.json():null;
+        const st=stR.ok?await stR.json():null;
 
-    const poolResults=await Promise.all(poolComps.map(async c=>{
-      const isCut=(c.status?.displayValue||'').toLowerCase().includes('cut')||(c.status?.displayValue||'').toLowerCase().includes('wd');
-      const rounds=await getLinescores(c.id);
-      // Fallback: use header score as current round score if no linescores
-      if(!Object.keys(rounds).length&&c.score){
-        const val=c.score==='E'?0:parseInt(c.score)||null;
-        if(val!==null)rounds['r'+ar]=val;
-      }
-      return{name:c.displayName,isCut,rounds};
+        // Parse per-round scores using period field (1–4)
+        const rounds={};
+        (ls?.items||[]).forEach(rd=>{
+          const p=rd.period;if(!p)return;
+          const dv=rd.displayValue;
+          const val=dv==='E'?0:parseInt(dv);
+          if(!isNaN(val))rounds['r'+p]=val;
+        });
+
+        // Detect cut / withdrawal from status type name
+        const stn=(st?.type?.name||'').toUpperCase();
+        const isCut=['MISSED_CUT','WITHDRAWN','STATUS_WD','STATUS_DQ'].some(k=>stn.includes(k));
+
+        return{poolName,isCut,rounds};
+      }catch(e){return{poolName,isCut:false,rounds:{}};}
     }));
 
-    // Non-pool players: use header score only (no linescore fetch needed)
-    const otherResults=otherComps.map(c=>{
-      const isCut=(c.status?.displayValue||'').toLowerCase().includes('cut')||(c.status?.displayValue||'').toLowerCase().includes('wd');
-      const rounds={};
-      if(c.score){const val=c.score==='E'?0:parseInt(c.score)||null;if(val!==null)rounds['r'+ar]=val;}
-      return{name:c.displayName,isCut,rounds};
+    // Step 4: infer active round from the data (max rounds any player has scores for)
+    let maxR=1;
+    playerData.forEach(({rounds})=>{
+      const n=[rounds.r1,rounds.r2,rounds.r3,rounds.r4].filter(v=>v!==null&&v!==undefined).length;
+      if(n>maxR)maxR=n;
     });
+    S.settings.activeRound=maxR;
+    document.getElementById('activeRound').value=maxR;
 
+    // Step 5: build tourneyField + S.scores
     tourneyField=[];
-    [...poolResults,...otherResults].forEach(({name,isCut,rounds})=>{
-      const valid=[rounds.r1,rounds.r2,rounds.r3,rounds.r4].filter(v=>v!==null);
+    playerData.filter(p=>p.poolName).forEach(({poolName,isCut,rounds})=>{
+      const{r1=null,r2=null,r3=null,r4=null}=rounds;
+      const valid=[r1,r2,r3,r4].filter(v=>v!==null);
       const total=valid.length?valid.reduce((a,b)=>a+b,0):null;
-      tourneyField.push({name,cut:isCut,...rounds,total});
-      if(!S.scores[name])S.scores[name]={};
-      S.scores[name].cut=isCut;
-      Object.assign(S.scores[name],rounds);
+      tourneyField.push({name:poolName,cut:isCut,r1,r2,r3,r4,total});
+      if(!S.scores[poolName])S.scores[poolName]={};
+      S.scores[poolName].cut=isCut;
+      if(r1!==null)S.scores[poolName].r1=r1;
+      if(r2!==null)S.scores[poolName].r2=r2;
+      if(r3!==null)S.scores[poolName].r3=r3;
+      if(r4!==null)S.scores[poolName].r4=r4;
     });
 
+    const now=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     document.getElementById('syncTime').textContent=now;
-    document.getElementById('syncRound').textContent='Round '+ar;
+    document.getElementById('syncRound').textContent='Round '+maxR;
     save();renderAll();
-  }catch(e){console.error('fetchScores error:',e);document.getElementById('syncTime').textContent='Error';buildTourneyFieldFromPool();renderAll();}
+  }catch(e){
+    console.error('fetchScores error:',e);
+    document.getElementById('syncTime').textContent='Error';
+    buildTourneyFieldFromPool();renderAll();
+  }
 }
 
 // ── AUTO-REFRESH ──
