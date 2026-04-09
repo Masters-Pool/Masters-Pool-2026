@@ -1598,9 +1598,12 @@ function setAugustaRound(round,btn){
   }
 }
 
+let augustaLoading=false;
 async function loadAugustaScoreboard(){
+  if(augustaLoading)return; // Prevent concurrent calls
+  augustaLoading=true;
   const tbody=document.getElementById('augustaScoreboard');
-  if(!tbody)return;
+  if(!tbody){augustaLoading=false;return;}
   tbody.innerHTML='<tr><td colspan="21" class="augusta-loading">Loading scoreboard...</td></tr>';
 
   // Fetch main leaderboard first
@@ -1611,6 +1614,7 @@ async function loadAugustaScoreboard(){
   const comps=data?.events?.[0]?.competitions?.[0]?.competitors;
   if(!comps||comps.length===0){
     renderAugustaDummy();
+    augustaLoading=false;
     return;
   }
   const top15=comps.slice(0,15);
@@ -1648,7 +1652,14 @@ async function loadAugustaScoreboard(){
     augustaPlayers.push({name,totalScore,thru,allRounds,roundScores});
   }
 
+  // Sort by score (lowest first, E=0, negative numbers first)
+  augustaPlayers.sort((a,b)=>{
+    const parseScore=(s)=>s==='E'?0:(s==='-'||s==='--'?999:parseInt(s)||999);
+    return parseScore(a.totalScore)-parseScore(b.totalScore);
+  });
+
   renderAugustaBoard();
+  augustaLoading=false;
 }
 
 function renderAugustaDummy(){
