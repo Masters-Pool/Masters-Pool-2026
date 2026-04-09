@@ -1627,11 +1627,12 @@ async function loadAugustaScoreboard(){
 
     if(id){
       try{
-        const detailUrl=`https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard/${data.events[0].id}/competitorsummary/${id}`;
+        const eventId=data.events[0].id;
+        const detailUrl=`https://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/${eventId}/competitions/${eventId}/competitors/${id}/linescores`;
         const dr=await fetch(detailUrl);
         if(dr.ok){
           const dd=await dr.json();
-          const rounds=dd.rounds||[];
+          const rounds=dd.items||[];
           rounds.forEach((rd,idx)=>{
             const rNum=idx+1;
             if(rd.linescores){
