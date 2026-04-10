@@ -350,6 +350,22 @@ input,select{font-family:inherit}
 }
 .augusta-table th.col-pos{font-size:10px;font-weight:700}
 
+/* Round summary columns (Total view) */
+.augusta-table .col-rnd{
+  width:50px;
+  font-size:14px;
+  font-weight:600;
+  text-align:center;
+  background:linear-gradient(180deg,
+    #f8f5ed 0%,
+    #f2efe6 15%,
+    #ebe8df 50%,
+    #e3e0d6 85%,
+    #dbd8ce 100%
+  );
+}
+.augusta-table th.col-rnd{font-size:10px;font-weight:700}
+
 /* SCORE column - left side, larger */
 .augusta-table .col-score{
   width:54px;
@@ -565,6 +581,7 @@ input,select{font-family:inherit}
   .augusta-table th{height:22px;font-size:8px}
   .augusta-table td{height:30px;font-size:12px}
   .augusta-table .col-pos{width:28px;font-size:10px}
+  .augusta-table .col-rnd{width:36px;font-size:11px}
   .augusta-table .col-score{width:40px;font-size:14px}
   .augusta-table .col-name{width:90px;font-size:10px;padding-left:6px}
   .augusta-table .col-hole{width:26px}
@@ -1355,7 +1372,8 @@ function renderLB(){
   const ranked=S.entries.map(e=>{
     const rs=[1,2,3,4].map(r=>entRnd(e,r));
     const tot=rs.filter(v=>v!==null).reduce((a,b)=>a+b,0);
-    const ds=tot;
+    const roundScore=lbR>0?entRnd(e,lbR):null;
+    const ds=(lbR>0&&roundScore!==null)?roundScore:tot;
     return{e,rs,tot,ds};
   }).sort(tiebreakSort);
   updateMovement(ranked);
@@ -1744,77 +1762,93 @@ function renderAugustaDummy(){
 
 function renderAugustaBoard(){
   const tbody=document.getElementById('augustaScoreboard');
-  if(!tbody)return;
+  const thead=tbody?.closest('table')?.querySelector('thead tr');
+  if(!tbody||!thead)return;
+
+  // Update header based on view
+  if(augustaRound===0){
+    // Total view - show round summary columns
+    thead.innerHTML=`
+      <th class="col-pos">POS</th>
+      <th class="col-score">SCORE</th>
+      <th class="col-name">PLAYER</th>
+      <th class="col-rnd">R1</th>
+      <th class="col-rnd">R2</th>
+      <th class="col-rnd">R3</th>
+      <th class="col-rnd">R4</th>
+      <th class="col-thru">THRU</th>`;
+  }else{
+    // Round view - show 18 holes
+    thead.innerHTML=`
+      <th class="col-pos">POS</th>
+      <th class="col-score">SCORE</th>
+      <th class="col-name">PLAYER</th>
+      ${[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18].map(h=>`<th class="col-hole">${h}</th>`).join('')}
+      <th class="col-thru">THRU</th>`;
+  }
 
   let html='';
   let pos=0,lastScore=null,lastPos=0;
   augustaPlayers.forEach((p,idx)=>{
-    // Calculate position (handle ties)
     pos=idx+1;
     const scoreKey=p.totalScore;
     if(scoreKey===lastScore){pos=lastPos;}
     else{lastScore=scoreKey;lastPos=pos;}
-    // Get score and holes based on selected round
-    let displayScore, displayHoles, displayThru;
 
-    let teeTime=null;
-    if(augustaRound===0){
-      // Total view - show total score and current round holes
-      displayScore=p.totalScore;
-      displayThru=p.thru;
-      // Find the current round (last one with data)
-      let currentRound=1;
-      for(let r=4;r>=1;r--){
-        if(p.allRounds[r].some(h=>h!=='')){
-          displayHoles=p.allRounds[r];
-          currentRound=r;
-          break;
-        }
-      }
-      if(!displayHoles){
-        displayHoles=p.allRounds[1];
-        // No holes played yet - show next tee time
-        for(let r=1;r<=4;r++){
-          if(p.teeTimes[r]){teeTime=p.teeTimes[r];break;}
-        }
-      }
-    }else{
-      // Specific round view
-      displayScore=p.roundScores[augustaRound]||'-';
-      displayHoles=p.allRounds[augustaRound];
-      const holesPlayed=displayHoles.filter(h=>h!=='').length;
-      displayThru=holesPlayed===18?'F':holesPlayed||'-';
-      // Show tee time if no holes played this round
-      if(holesPlayed===0&&p.teeTimes[augustaRound]){
-        teeTime=p.teeTimes[augustaRound];
-      }
-    }
-
-    const scoreNum=displayScore==='E'?0:(displayScore==='-'?999:parseInt(displayScore));
-    const scoreCls=scoreNum<0?'score-under':scoreNum===0?'score-even':'score-over';
+    let displayScore, displayThru, teeTime=null;
+    const scoreNum=(s)=>s==='E'?0:(s==='-'||s==='--'?999:parseInt(s)||999);
+    const scoreCls=(s)=>{const n=scoreNum(s);return n<0?'score-under':n===0?'score-even':'score-over';};
+    const fmtRnd=(s)=>!s||s==='-'?'—':s==='E'||s===0?'E':s>0?'+'+s:String(s);
 
     const posDisplay=pos===lastPos&&idx>0&&augustaPlayers[idx-1].totalScore===scoreKey?'T'+pos:pos;
-    html+=`<tr>
-      <td class="col-pos">${posDisplay}</td>
-      <td class="col-score ${scoreCls}">${displayScore}</td>
-      <td class="col-name player-name">${p.name.toUpperCase()}</td>`;
 
-    for(let i=0;i<18;i++){
-      const stroke=displayHoles[i];
-      if(stroke===''||stroke===undefined)html+=`<td class="col-hole">-</td>`;
-      else{
-        const par=AUGUSTA_PAR[i];
-        const diff=stroke-par;
-        let cls='';
-        if(diff<=-2)cls='eagle';
-        else if(diff===-1)cls='birdie';
-        else if(diff===1)cls='bogey';
-        else if(diff>=2)cls='double';
-        html+=`<td class="col-hole ${cls}">${stroke}</td>`;
+    if(augustaRound===0){
+      // Total view - show round summaries
+      displayScore=p.totalScore;
+      displayThru=p.thru;
+      // Show tee time if no holes played yet
+      if(!p.allRounds[1].some(h=>h!=='')){
+        for(let r=1;r<=4;r++){if(p.teeTimes[r]){teeTime=p.teeTimes[r];break;}}
       }
-    }
 
-    html+=`<td class="col-thru">${teeTime||displayThru}</td></tr>`;
+      html+=`<tr>
+        <td class="col-pos">${posDisplay}</td>
+        <td class="col-score ${scoreCls(displayScore)}">${displayScore}</td>
+        <td class="col-name player-name">${p.name.toUpperCase()}</td>
+        <td class="col-rnd ${scoreCls(p.roundScores[1])}">${fmtRnd(p.roundScores[1])}</td>
+        <td class="col-rnd ${scoreCls(p.roundScores[2])}">${fmtRnd(p.roundScores[2])}</td>
+        <td class="col-rnd ${scoreCls(p.roundScores[3])}">${fmtRnd(p.roundScores[3])}</td>
+        <td class="col-rnd ${scoreCls(p.roundScores[4])}">${fmtRnd(p.roundScores[4])}</td>
+        <td class="col-thru">${teeTime||displayThru}</td></tr>`;
+    }else{
+      // Round view - show 18 holes
+      displayScore=p.roundScores[augustaRound]||'-';
+      const displayHoles=p.allRounds[augustaRound];
+      const holesPlayed=displayHoles.filter(h=>h!=='').length;
+      displayThru=holesPlayed===18?'F':holesPlayed||'-';
+      if(holesPlayed===0&&p.teeTimes[augustaRound]){teeTime=p.teeTimes[augustaRound];}
+
+      html+=`<tr>
+        <td class="col-pos">${posDisplay}</td>
+        <td class="col-score ${scoreCls(displayScore)}">${displayScore}</td>
+        <td class="col-name player-name">${p.name.toUpperCase()}</td>`;
+
+      for(let i=0;i<18;i++){
+        const stroke=displayHoles[i];
+        if(stroke===''||stroke===undefined)html+=`<td class="col-hole">-</td>`;
+        else{
+          const par=AUGUSTA_PAR[i];
+          const diff=stroke-par;
+          let cls='';
+          if(diff<=-2)cls='eagle';
+          else if(diff===-1)cls='birdie';
+          else if(diff===1)cls='bogey';
+          else if(diff>=2)cls='double';
+          html+=`<td class="col-hole ${cls}">${stroke}</td>`;
+        }
+      }
+      html+=`<td class="col-thru">${teeTime||displayThru}</td></tr>`;
+    }
   });
 
   tbody.innerHTML=html;
