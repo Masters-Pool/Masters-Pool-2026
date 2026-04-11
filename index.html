@@ -1987,9 +1987,12 @@ async function fetchScores(){
           if(!isNaN(val))rounds['r'+p]=val;
         });
 
-        // Detect cut / withdrawal from status type name
+        // Detect cut / withdrawal from status type name or displayValue
         const stn=(st?.type?.name||'').toUpperCase();
-        const isCut=['MISSED_CUT','WITHDRAWN','STATUS_WD','STATUS_DQ'].some(k=>stn.includes(k));
+        const sdv=(st?.displayValue||st?.type?.description||'').toUpperCase();
+        const isCut=['MISSED_CUT','STATUS_CUT','WITHDRAWN','STATUS_WD','STATUS_DQ'].some(k=>stn.includes(k))||
+                    sdv.includes('CUT')||sdv==='WD'||sdv==='WITHDRAWN'||sdv==='DQ';
+        if(isCut||poolName?.includes('DeChambeau')||poolName?.includes('Rahm'))console.log('[CUT DEBUG]',poolName,'stn:',stn,'sdv:',sdv,'isCut:',isCut,st);
 
         return{poolName,isCut,rounds};
       }catch(e){return{poolName,isCut:false,rounds:{}};}
@@ -2012,7 +2015,7 @@ async function fetchScores(){
       const total=valid.length?valid.reduce((a,b)=>a+b,0):null;
       tourneyField.push({name:poolName,cut:isCut,r1,r2,r3,r4,total});
       if(!S.scores[poolName])S.scores[poolName]={};
-      S.scores[poolName].cut=isCut;
+      if(isCut)S.scores[poolName].cut=true;
       if(r1!==null)S.scores[poolName].r1=r1;
       if(r2!==null)S.scores[poolName].r2=r2;
       if(r3!==null)S.scores[poolName].r3=r3;
